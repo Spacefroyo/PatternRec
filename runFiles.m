@@ -25,6 +25,9 @@ for i = 2:length(rootFolderList)
             fileName = [rootFolder currName currentFile];
             currImage = imread(fileName);
             [x1(iNumFold,k), y1(iNumFold,k), x2(iNumFold,k), y2(iNumFold,k)] = LineDetection(fileName);
+            intensity(i-1, k-1) = lineIntensity(fileName, x1(iNumFold,k), y1(iNumFold,k), x2(iNumFold,k), y2(iNumFold,k));
         end
     end 
 end
+
+graph(intensity)
