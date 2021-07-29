@@ -31,3 +31,4 @@ for i = 2:length(rootFolderList)
 end
 
 graph(intensity)
+write(intensity)
