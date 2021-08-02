@@ -1,0 +1,507 @@
+classdef LineDetectionProject < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                   matlab.ui.Figure
+        TabGroup                   matlab.ui.container.TabGroup
+        PatternRecognitionTab      matlab.ui.container.Tab
+        Step1ChooseImagewithObviousLineButton  matlab.ui.control.Button
+        PlayButton                 matlab.ui.control.Button
+        Step3GetintensitiesButton  matlab.ui.control.Button
+        right                      matlab.ui.control.Button
+        left                       matlab.ui.control.Button
+        Step2LoadFolderwithImagesButton  matlab.ui.control.Button
+        ImageSlider                matlab.ui.control.Slider
+        ImageLabel                 matlab.ui.control.Label
+        UIAxes                     matlab.ui.control.UIAxes
+        ImageAdjustTab             matlab.ui.container.Tab
+        LoadFileButton             matlab.ui.control.Button
+    end
+
+    
+    properties (Access = private)
+        myFolder   
+        filePattern
+        tifFiles   
+        play
+        means
+        numImages
+        playTimer
+        finalX1
+        finalY1
+        finalX2
+        finalY2
+        Label
+        centroids
+    end
+    
+    methods (Access = private)
+        function displayImage(app, index)
+            set(app.ImageSlider, 'value', index);
+            file = app.tifFiles(round(index)); 
+            filePath = fullfile(file.folder, file.name);
+            imageArray = imread(filePath);
+            app.Label.Text = file.name;
+            app.ImageLabel.Text = round(index)+ "/" +app.numImages;
+            
+            global imageshown
+            imageshown = imageArray;
+            I = imshow(imageArray, 'Parent', app.UIAxes, ... 
+            'XData', [1 app.UIAxes.Position(3)], ...
+            'YData', [1 app.UIAxes.Position(4)]);
+            
+            % Set limits of axes
+            app.UIAxes.XLim = [0 I.XData(2)];
+            app.UIAxes.YLim = [0 I.YData(2)];
+            drawnow;
+        end
+        function [x1, y1, x2, y2] = LineDetection(app, imageFile)
+            %imageFile = 'One Cell.tif';
+            I = imageFile;
+            I = im2gray(I(:,:,1));
+            level = 0.99;
+            BW = imbinarize(I,level);
+            % imshowpair(I, BW, 'montage');
+            [H,theta,rho] = hough(BW);
+            P = houghpeaks(H,1,'threshold',ceil(0.3*max(H(:))));
+            x = theta(P(:,2));
+            y = rho(P(:,1));
+            % plot(x,y,'s','color','black');
+            lines = houghlines(BW,theta,rho,P,'FillGap',90,'MinLength',2.5);
+            % figure
+            % imshow(I), hold on
+            if (~isempty(lines))
+                xy = [lines(1).point1; lines(1).point2];
+                %    plot(xy(:,1),xy(:,2),'LineWidth',2,'Color','green');
+                %    plot(xy(1,1),xy(1,2),'x','LineWidth',2,'Color','yellow');
+                %    plot(xy(2,1),xy(2,2),'x','LineWidth',2,'Color','red');
+                x1 = xy(1,1);
+                y1 = xy(1,2);
+                x2 = xy(2,1);
+                y2 = xy(2,2);
+            else
+                disp('No lines founded');
+                x1 = 0;
+                y1 = 0;
+                x2 = 0;
+                y2 = 0;
+            end
+
+        end
+        function [weightedCellCentroid, cellCentroid] = cellCentroidLocate(app, imageFile)
+            %imageFile = 'Cell 25s.tif';
+            image = imread(imageFile);
+            I_eq = adapthisteq(image);
+            %imshow(I_eq)
+            bw = imbinarize(I_eq, graythresh(I_eq));
+            %imshow(bw)
+            bw2 = imfill(bw,'holes');
+            bw3 = imopen(bw2, ones(5,5));
+            bw4 = bwareaopen(bw3, 40);
+            %bw4_perim = bwperim(bw4);
+            %overlay1 = imoverlay(I_eq, bw4_perim, [.3 1 .3]);
+            %imshow(bw4)
+            s = regionprops(bw4,image,{'Centroid','WeightedCentroid'});
+            %figure, imshow(I)
+            % title('Weighted (red) and Unweighted (blue) Centroids');
+            % hold on
+            numObj = numel(s);
+            for k = 1 : numObj
+                %plot(s(k).WeightedCentroid(1), s(k).WeightedCentroid(2), 'r*')
+                weightedCellCentroid(k,:) = [s(k).WeightedCentroid(1), s(k).WeightedCentroid(2)];
+                % plot(s(k).Centroid(1), s(k).Centroid(2), 'bo')
+                cellCentroid(k,:) = [s(k).Centroid(1), s(k).Centroid(2)];
+            end
+        end  
+        function cellCrop(app, fileName)
+            centroidImage = imread(fileName);
+            [sizeImage1,sizeImage2] = size(centroidImage);
+            radius = 55;
+            [tempWC, tempC] = app.cellCentroidLocate(fileName);
+            [numCentroid, numCol] = size(tempC);
+            currImage = imread(fileName);
+            for ci = 1:numCentroid
+                currC = round(tempC(ci,:));
+                app.centroids(1, ci) = currC(1);
+                app.centroids(2, ci) = currC(2);
+                xMin = currC(1) - radius;
+                xMax = currC(1) + radius;
+                yMin = currC(2) - radius;
+                yMax = currC(2) + radius;
+                if xMin < 0 || xMax > sizeImage1 || yMin < 0 || yMax > sizeImage2
+                    continue
+                end
+                currCell = currImage(yMin:yMax, xMin:xMax);
+                [x1, y1, x2, y2] = app.LineDetection(currCell);
+                app.finalX1(ci) = currC(1) - radius + x1;
+                app.finalY1(ci) = currC(2) - radius + y1;
+                app.finalX2(ci) = currC(1) - radius + x2;
+                app.finalY2(ci) = currC(2) - radius + y2;
+            end
+        end
+
+        function dispNext(app)
+            if not(app.numImages)
+                return;
+            end
+            
+            y = min(app.ImageSlider.Value+1, app.numImages);
+            displayImage(app, y);
+        end
+        
+        function [intensity] = lineIntensity(app, imageFile, x1, y1, x2, y2)
+            I = imageFile;
+            I_eq = adapthisteq(I(:, :, 1));
+            bw = im2bw(I_eq, graythresh(I_eq));
+            bw2 = imfill(bw,'holes');
+            bw3 = imopen(bw2, ones(5,5));
+            bw4 = bwareaopen(bw3, 40);
+            
+            numPixels = 0;
+            background = [];
+            for i = 1 : size(I_eq, 1)
+                for j = 1 : size(I_eq, 2)
+                    if bw4(i, j) == 1
+                        numPixels = numPixels + 1;
+                        background(numPixels) = int32(I_eq(i, j));
+                    end
+                end
+            end
+            backgroundIntensity = 0;
+            background = sort(background);
+            IQR = background(round(numPixels*3/4))-background(round(numPixels/4));
+            count = 0;
+            for i = 1 : numPixels
+                if ((background(round(numPixels/2))-(IQR*3/2) <= background(i)) && (background(round(numPixels/2))+(IQR*3/2) >= background(i)))
+                    backgroundIntensity = backgroundIntensity + background(i);
+                    count = count + 1;
+                end
+            end
+            intensity = mean(improfile(I_eq, [x1 x2], [y1 y2])) - backgroundIntensity/count;
+
+        end
+        
+        function [] = graphPlot(app, intensity)
+            figure
+            p = plot(intensity);
+            
+            hold on
+            title('Line Intensity vs. Time')
+            xlabel('Image Index')
+            ylabel('Line Intensity')
+            hold off
+        end
+
+        function [] = write(app, intensity)
+            for i = 1:size(intensity, 1)
+                time(i, 1) = i;
+            end
+            for i = 1:size(intensity, 2)
+                cellIndex(1, i) = i;
+            end
+            writecell({'time'}, 'output.xlsx', 'Range', 'A2');
+            writecell({'cellIndex'}, 'output.xlsx', 'Range', 'B1');
+            writematrix(time, 'output.xlsx', 'Range', 'A3');
+            writematrix(cellIndex, 'output.xlsx', 'Range', 'C1');
+            writematrix(intensity, 'output.xlsx', 'Range', 'C3');
+            winopen('output.xlsx');
+        end
+        
+    end
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            set(app.UIAxes,'DataAspectRatio',[2 2 1])
+            app.play = false;
+            
+            app.numImages = 0;
+            app.playTimer = timer('ExecutionMode', 'fixedRate', 'Period', 0.1, 'TimerFcn', @(~, ~) app.dispNext());
+            try 
+                rmdir 'Pattern Recognition'/tempFold s
+            catch
+                disp 'No folder to delete'
+            end
+            try
+                rmdir 'Pattern Recognition'/updatedImages s
+            catch 
+                disp 'No folder to delete'
+            end
+            
+        end
+
+        % Button pushed function: Step2LoadFolderwithImagesButton
+        function LoadFile(app, event)
+            try
+                app.myFolder = uigetdir('C:');  % get file
+                
+                figure(app.UIFigure); % focus window again
+                app.filePattern = '.tif';
+                app.tifFiles = dir([app.myFolder '/*' app.filePattern]);
+                app.numImages = length(app.tifFiles); % takes length and adjusts the slider
+                app.ImageSlider.Limits = [1 app.numImages];
+                
+                if not(app.numImages)
+                    return;
+                end
+                
+                set(app.ImageSlider, 'value', 1) % sets slider
+                mkdir("Pattern Recognition/tempFold"); % temporary folder for storing images
+                
+                for i = 1:length(app.tifFiles)
+                    image = [app.tifFiles(i).folder '/' app.tifFiles(i).name];
+                    currFig = figure;
+                    imshow(image), hold on
+                    for ci = 1:length(app.finalX1)
+                        plot([app.finalX1(ci), app.finalX2(ci)], [app.finalY1(ci), app.finalY2(ci)],'LineWidth',2,'Color','green');
+                    end
+                    hold off
+                    saveas(gcf, ['Pattern Recognition/tempFold/' app.tifFiles(i).name])
+                    close(currFig);
+                end
+                app.tifFiles = dir(['Pattern Recognition/tempFold/*' '.tif']);
+                displayImage(app, 1);
+            catch
+                warning("There was an error in selecting your files. Please try again.");
+            end
+        end
+
+        % Value changing function: ImageSlider
+        function ImageSliderValueChanging(app, event)
+            if not(app.numImages)
+                return;
+            end
+            
+            y = event.Value;
+            displayImage(app, y);
+        end
+
+        % Button pushed function: left
+        function leftPressed(app, event)
+            if not(app.numImages)
+                return;
+            end
+            
+            y = max(app.ImageSlider.Value-1, 1);
+            displayImage(app, y);
+        end
+
+        % Button pushed function: right
+        function rightButtonPushed(app, event)
+            if not(app.numImages)
+                return;
+            end
+            
+            y = min(app.ImageSlider.Value+1, app.numImages);
+            displayImage(app, y);
+        end
+
+        % Button pushed function: PlayButton
+        function PlayButtonPushed(app, event)
+            app.play = not(app.play);
+            if app.play
+                app.PlayButton.Text = 'Stop';
+                start(app.playTimer);
+                
+            else
+                app.PlayButton.Text = 'Play';
+                stop(app.playTimer);
+                
+            end
+            
+            
+        end
+
+        % Button pushed function: Step3GetintensitiesButton
+        function GetIntensities(app, event)
+            % TODO - verify
+            
+
+            
+            %intensity code
+            rootFolder = 'Pattern Recognition/updatedImages/';
+            imageType = '.tif';
+            rootFolderList = dir([rootFolder '*']);
+            rootFolderList = rootFolderList(3:end);
+            radius = 55;
+            for i = 2:length(rootFolderList)
+                fileName = [rootFolder rootFolderList(i).name];
+                currImage = imread(fileName);
+                [sizeImage1,sizeImage2] = size(currImage);
+                for k = 1:length(app.centroids)
+                    currC(1) = app.centroids(1, k);
+                    currC(2) = app.centroids(2, k);
+                    xMin = currC(1) - radius;
+                    xMax = currC(1) + radius;
+                    yMin = currC(2) - radius;
+                    yMax = currC(2) + radius;
+                    if xMin < 0 || xMax > sizeImage1 || yMin < 0 || yMax > sizeImage2
+                        continue
+                    end
+                    x1 = app.finalX1(k) - currC(1) + radius;
+                    y1 = app.finalY1(k) - currC(2) + radius;
+                    x2 = app.finalX2(k) - currC(1) + radius;
+                    y2 = app.finalY2(k) - currC(2) + radius;
+                    currCell = currImage(yMin:yMax, xMin:xMax);
+                    intensity(i-1, k) = lineIntensity(app, currCell, x1, y1, x2, y2);
+                end
+            end
+            
+            graphPlot(app, intensity)
+            saveas(gcf, 'Pattern Recognition/tempFold/lineIntensityGraph')
+            write(app, intensity)
+        end
+
+        % Button pushed function: 
+        % Step1ChooseImagewithObviousLineButton
+        function Step1ChooseImagewithObviousLineButtonPushed(app, event)
+%             try 
+                filterspec = '*.tif';
+                [f, p] = uigetfile(filterspec);
+                lineFile = [p f];
+                app.cellCrop(lineFile);
+%             catch
+%                 warning("There was an error in selecting your files. Please try again.")
+%             end
+            
+        end
+
+        % Button pushed function: LoadFileButton
+        function LoadFileButtonPushed(app, event)
+            currFolder = uigetdir('C:');  % get file
+            figure(app.UIFigure); % focus window again
+            fileType = '.tif';
+            allFiles = dir([currFolder '/*' fileType]);
+            mkdir('Pattern Recognition/updatedImages');
+            for i = 1:length(allFiles)
+                image = imread([allFiles(i).folder '/' allFiles(i).name]);
+                image = imadjust(image);
+                imwrite(image, ['Pattern Recognition/updatedImages/' allFiles(i).name])
+            end
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 100 821 797];
+            app.UIFigure.Name = 'MATLAB App';
+            app.UIFigure.HandleVisibility = 'on';
+
+            % Create TabGroup
+            app.TabGroup = uitabgroup(app.UIFigure);
+            app.TabGroup.Position = [1 -2 818 792];
+
+            % Create PatternRecognitionTab
+            app.PatternRecognitionTab = uitab(app.TabGroup);
+            app.PatternRecognitionTab.Title = 'Pattern Recognition';
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.PatternRecognitionTab);
+            app.UIAxes.XColor = 'none';
+            app.UIAxes.XTick = [];
+            app.UIAxes.YColor = 'none';
+            app.UIAxes.YTick = [];
+            app.UIAxes.ZColor = 'none';
+            app.UIAxes.Position = [64 90 714 638];
+
+            % Create ImageLabel
+            app.ImageLabel = uilabel(app.PatternRecognitionTab);
+            app.ImageLabel.HorizontalAlignment = 'center';
+            app.ImageLabel.Position = [367 23 109 22];
+            app.ImageLabel.Text = 'Image';
+
+            % Create ImageSlider
+            app.ImageSlider = uislider(app.PatternRecognitionTab);
+            app.ImageSlider.Limits = [0 200];
+            app.ImageSlider.ValueChangingFcn = createCallbackFcn(app, @ImageSliderValueChanging, true);
+            app.ImageSlider.Position = [143 74 549 3];
+            app.ImageSlider.Value = 1;
+
+            % Create Step2LoadFolderwithImagesButton
+            app.Step2LoadFolderwithImagesButton = uibutton(app.PatternRecognitionTab, 'push');
+            app.Step2LoadFolderwithImagesButton.ButtonPushedFcn = createCallbackFcn(app, @LoadFile, true);
+            app.Step2LoadFolderwithImagesButton.Position = [315 727 191 24];
+            app.Step2LoadFolderwithImagesButton.Text = {'Step 2: Load Folder with Images'; ''};
+
+            % Create left
+            app.left = uibutton(app.PatternRecognitionTab, 'push');
+            app.left.ButtonPushedFcn = createCallbackFcn(app, @leftPressed, true);
+            app.left.Position = [100 60 27 22];
+            app.left.Text = '<';
+
+            % Create right
+            app.right = uibutton(app.PatternRecognitionTab, 'push');
+            app.right.ButtonPushedFcn = createCallbackFcn(app, @rightButtonPushed, true);
+            app.right.Position = [702 60 27 22];
+            app.right.Text = '>';
+
+            % Create Step3GetintensitiesButton
+            app.Step3GetintensitiesButton = uibutton(app.PatternRecognitionTab, 'push');
+            app.Step3GetintensitiesButton.ButtonPushedFcn = createCallbackFcn(app, @GetIntensities, true);
+            app.Step3GetintensitiesButton.Position = [529 727 249 24];
+            app.Step3GetintensitiesButton.Text = 'Step 3: Get intensities';
+
+            % Create PlayButton
+            app.PlayButton = uibutton(app.PatternRecognitionTab, 'push');
+            app.PlayButton.ButtonPushedFcn = createCallbackFcn(app, @PlayButtonPushed, true);
+            app.PlayButton.Position = [739 60 39 22];
+            app.PlayButton.Text = 'Play';
+
+            % Create Step1ChooseImagewithObviousLineButton
+            app.Step1ChooseImagewithObviousLineButton = uibutton(app.PatternRecognitionTab, 'push');
+            app.Step1ChooseImagewithObviousLineButton.ButtonPushedFcn = createCallbackFcn(app, @Step1ChooseImagewithObviousLineButtonPushed, true);
+            app.Step1ChooseImagewithObviousLineButton.Position = [64 727 236 23];
+            app.Step1ChooseImagewithObviousLineButton.Text = 'Step 1: Choose Image with Obvious Line';
+
+            % Create ImageAdjustTab
+            app.ImageAdjustTab = uitab(app.TabGroup);
+            app.ImageAdjustTab.Title = 'Image Adjust';
+
+            % Create LoadFileButton
+            app.LoadFileButton = uibutton(app.ImageAdjustTab, 'push');
+            app.LoadFileButton.ButtonPushedFcn = createCallbackFcn(app, @LoadFileButtonPushed, true);
+            app.LoadFileButton.Position = [362 398 100 22];
+            app.LoadFileButton.Text = 'Load File';
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = CalciumProjectApp
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
