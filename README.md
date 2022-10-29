@@ -1,5 +1,6 @@
 # PatternRec
-*This project was done as part of the 2021 Summer Research Internship hosted by the UCSD & UCI Biophotonics Lab*\n
+*This project was done as part of the 2021 Summer Research Internship hosted by the UCSD & UCI Biophotonics Lab*
+
 Summary: The input is a group of cells photographed many times over a set time interval, each sustaining laser damage along a linear path. Using MATLAB, the program automatically creates a descriptive model of the relationship between time and laser damage visibility (perceived intensity).
 
 ## Pattern Recognition
