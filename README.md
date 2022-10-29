@@ -1,14 +1,14 @@
 # PatternRec
 Summary: The input is a group of cells photographed many times over a set time interval, each sustaining laser damage along a linear path. Using MATLAB, the program automatically creates a descriptive model of the relationship between time and laser damage visibility (perceived intensity).
 
-# Pattern Recognition
-The Hough Transform was used to detect the positions of linear laser damage in individual cells.
+## Pattern Recognition
+[The Hough Transform](https://en.wikipedia.org/wiki/Hough_transform#Detecting_lines) was used to detect the positions of linear laser damage in individual cells.
 
-# Analytics
+## Analytics
 Averages for differences between laser damage intensity and ambient brightness were calculated for each group in each timeframe.
 The averages were plotted against time, resulting in patterns that supported thereotical conjectures.
 
-# Tutorial
+## Tutorial
 Run LineDetectionProject.mlapp in Pattern Recognition folder
 ![Step1](https://user-images.githubusercontent.com/44252902/198814245-cb31ba4f-3863-499f-8509-8ad6af30410e.png)
 
