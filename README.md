@@ -1,7 +1,5 @@
 # PatternRec
-Summary: 
-Input: A group of cells photographed many times over a set time interval, each sustaining laser damage along a linear path.
-Output: A descriptive model of the relationship between time and laser damage visibility (perceived intensity).
+Summary: A group of cells photographed many times over a set time interval, each sustaining laser damage along a linear path. The program automatically creates a descriptive model of the relationship between time and laser damage visibility (perceived intensity).
 
 # Pattern Recognition
 The Hough Transform was used to detect the positions of linear laser damage in individual cells.
