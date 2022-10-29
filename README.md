@@ -9,6 +9,7 @@ Averages for differences between laser damage intensity and ambient brightness w
 The averages were plotted against time, resulting in patterns that supported thereotical conjectures.
 
 # Tutorial
+Run LineDetectionProject.mlapp in Pattern Recognition folder
 ![Step1](https://user-images.githubusercontent.com/44252902/198814245-cb31ba4f-3863-499f-8509-8ad6af30410e.png)
 
 ![Step2](https://user-images.githubusercontent.com/44252902/198814243-c0669fa6-b9eb-4584-ab1b-f12d4a2bbdac.png)
